@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aplikasi Absensi Murid</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .status-btn {
+            transition: all 0.2s ease-in-out;
+        }
+        .status-btn.active {
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        #qrcode-container img {
+            margin: auto;
+        }
+        .rombel-tab.active {
+            background-color: #0ea5e9;
+            color: white;
+            font-weight: bold;
+        }
+        @media print {
+            body {
+                background-color: white;
+            }
+            #app {
+                padding: 0; margin: 0; max-width: 100%;
+            }
+            header, #controls, #back-button, #date-picker, #teacher-info-inputs, #class-selection-view {
+                display: none !important;
+            }
+            #print-header {
+                display: block !important;
+            }
+            #attendance-view .bg-white {
+                box-shadow: none;
+                border: 1px solid #eee;
+            }
+            .status-btn {
+                display: none;
+            }
+            .student-status-print {
+                display: block !important;
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800">
+
+    <div id="app" class="container mx-auto p-4 md:p-8 max-w-4xl">
+
+        <!-- Halaman Awal / Landing Page -->
+        <div id="landing-page" class="flex flex-col items-center justify-center h-[75vh]">
+            <h1 class="text-4xl font-bold text-slate-700 mb-4">Aplikasi Absensi Murid</h1>
+            <h2 class="text-2xl font-semibold text-slate-600 mb-2">UPTD SMP NEGERI 1 PANGALE</h2>
+            <p class="text-slate-500 mb-4">Kecamatan Pangale, Kabupaten Mamuju Tengah</p>
+            <button id="open-login-btn" class="bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-6 rounded-lg text-lg shadow mb-4">
+                Login Guru
+            </button>
+            <button id="open-app-btn" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-6 rounded-lg text-lg shadow">
+                Masuk ke Aplikasi
+            </button>
+        </div>
+
+        <!-- Sisa aplikasi, disembunyikan di awal -->
+        <header class="text-center mb-8 relative hidden" id="main-header">
+            <h1 class="text-3xl md:text-4xl font-bold text-slate-700">Absensi Murid</h1>
+            <h2 class="text-xl md:text-2xl font-semibold text-slate-600 mt-2">UPTD SMP NEGERI 1 PANGALE</h2>
+            <p class="text-slate-500">Kecamatan Pangale, Kabupaten Mamuju Tengah</p>
+            <p id="current-date" class="text-slate-500 mt-4 text-lg"></p>
+            <button id="share-app-btn" class="absolute top-0 right-0 p-2 text-slate-500 hover:text-sky-600 hover:bg-slate-200 rounded-full transition-colors" title="Bagikan Aplikasi">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12s-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
+                </svg>
+            </button>
+            <span id="user-greeting" class="absolute top-0 left-0 p-2 text-slate-600 font-semibold"></span>
+        </header>
+
+        <div id="class-selection-view" class="hidden">
+            <!-- ... (isi class selection view seperti sebelumnya) ... -->
+            <div id="teacher-info-inputs" class="max-w-md mx-auto mb-6 bg-white p-4 rounded-lg shadow">
+                <div class="mb-3">
+                    <label for="teacher-name-input" class="block text-sm font-medium text-slate-700">Nama Guru</label>
+                    <input type="text" id="teacher-name-input" placeholder="Masukkan nama guru..." class="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500">
+                </div>
+                <div>
+                    <label for="subject-input" class="block text-sm font-medium text-slate-700">Mata Pelajaran</label>
+                    <input type="text" id="subject-input" placeholder="Masukkan mata pelajaran..." class="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500">
+                </div>
+            </div>
+            <div class="max-w-2xl mx-auto">
+                <h2 class="text-2xl font-semibold mb-2 text-center">Kelola Rombongan Belajar</h2>
+                <p class="text-center text-slate-500 mb-6">Pilih, beri nama, dan isi data siswa untuk setiap rombel.</p>
+                <div id="rombel-tabs" class="flex justify-center flex-wrap gap-2 mb-6"></div>
+                <div id="rombel-management-view" class="bg-white p-6 rounded-lg shadow-md"></div>
+            </div>
+            <input type="file" id="excel-file-input" class="hidden" accept=".xlsx, .xls">
+        </div>
+
+        <div id="attendance-view" class="hidden">
+            <!-- ... (isi attendance view seperti sebelumnya) ... -->
+            <div class="bg-white p-6 rounded-2xl shadow-lg">
+                <div id="print-header" class="hidden mb-6"></div>
+                <div class="flex justify-between items-center mb-2 flex-wrap gap-4" id="controls">
+                     <button id="back-button" class="bg-slate-500 hover:bg-slate-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">&larr; Kembali</button>
+                    <div class="flex items-center gap-2">
+                        <button id="export-csv-btn" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">Ekspor CSV</button>
+                         <button id="export-pdf-btn" class="bg-rose-500 hover:bg-rose-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Cetak PDF</button>
+                        <button id="reset-attendance-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">Reset</button>
+                    </div>
+                </div>
+                <div class="flex justify-center items-center my-4 flex-wrap">
+                    <div class="flex-grow text-center">
+                         <h2 id="class-title" class="text-2xl md:text-3xl font-bold text-center text-sky-600"></h2>
+                    </div>
+                    <div>
+                        <input type="date" id="date-picker" class="p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500">
+                    </div>
+                </div>
+                <div id="attendance-info" class="mb-4 border-b pb-4 text-sm text-slate-600"></div>
+                <div id="attendance-summary" class="mb-6 flex flex-wrap justify-center gap-4 text-center"></div>
+                <div id="student-list" class="space-y-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Notifikasi & Konfirmasi -->
+    <div id="modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 p-4">
+        <div class="bg-white p-6 rounded-lg shadow-xl text-center max-w-sm w-full">
+            <p id="modal-message" class="mb-6 text-lg"></p>
+            <div id="modal-buttons" class="flex justify-center gap-4">
+                <button id="modal-confirm-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg">Ya, Lanjutkan</button>
+                <button id="modal-cancel-btn" class="bg-slate-500 hover:bg-slate-600 text-white font-bold py-2 px-6 rounded-lg">Batal</button>
+                <button id="modal-ok-btn" class="bg-sky-500 hover:bg-sky-600 text-white font-bold py-2 px-6 rounded-lg">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Bagikan -->
+    <div id="share-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 p-4">
+        <div class="bg-white p-6 rounded-lg shadow-xl text-center max-w-sm w-full relative">
+            <button id="share-modal-close-btn" class="absolute top-2 right-2 text-slate-400 hover:text-slate-600">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+            <h3 class="text-xl font-bold mb-4">Bagikan Aplikasi</h3>
+            <p class="text-sm text-slate-500 mb-4">Bagikan file .html ini atau salin tautan jika aplikasi di-hosting online.</p>
+            <div id="qrcode-container" class="p-2 bg-white rounded-md border mb-4"></div>
+            <div class="flex">
+                <input type="text" id="share-url-input" readonly class="w-full px-3 py-2 bg-slate-100 border border-slate-300 rounded-l-md text-sm">
+                <button id="copy-url-btn" class="bg-sky-500 hover:bg-sky-600 text-white font-bold py-2 px-4 rounded-r-md">Salin</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Login -->
+    <div id="login-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 p-4">
+      <div class="bg-white p-6 rounded-lg shadow-xl text-center max-w-sm w-full relative">
+        <button id="login-modal-close-btn" class="absolute top-2 right-2 text-slate-400 hover:text-slate-600">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+        <h3 class="text-xl font-bold mb-4">Login Guru</h3>
+        <form id="login-form" class="space-y-4">
+          <input type="text" id="login-username" class="w-full px-3 py-2 border rounded-md" placeholder="Username" required>
+          <input type="password" id="login-password" class="w-full px-3 py-2 border rounded-md" placeholder="Password" required>
+          <button type="submit" class="bg-sky-500 hover:bg-sky-600 text-white font-bold py-2 px-4 rounded-md w-full">Login</button>
+        </form>
+        <div id="login-error" class="mt-3 text-red-600 text-sm hidden"></div>
+      </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const app = {
+                // DOM ELEMENTS
+                landingPage: document.getElementById('landing-page'),
+                openLoginBtn: document.getElementById('open-login-btn'),
+                openAppBtn: document.getElementById('open-app-btn'),
+                mainHeader: document.getElementById('main-header'),
+                classSelectionView: document.getElementById('class-selection-view'),
+                attendanceView: document.getElementById('attendance-view'),
+                studentListContainer: document.getElementById('student-list'),
+                classTitle: document.getElementById('class-title'),
+                backButton: document.getElementById('back-button'),
+                datePicker: document.getElementById('date-picker'),
+                currentDateEl: document.getElementById('current-date'),
+                summaryContainer: document.getElementById('attendance-summary'),
+                excelFileInput: document.getElementById('excel-file-input'),
+                exportCsvBtn: document.getElementById('export-csv-btn'),
+                exportPdfBtn: document.getElementById('export-pdf-btn'),
+                resetAttendanceBtn: document.getElementById('reset-attendance-btn'),
+                teacherNameInput: document.getElementById('teacher-name-input'),
+                subjectInput: document.getElementById('subject-input'),
+                attendanceInfo: document.getElementById('attendance-info'),
+                printHeader: document.getElementById('print-header'),
+
+                rombelTabsContainer: document.getElementById('rombel-tabs'),
+                rombelManagementView: document.getElementById('rombel-management-view'),
+
+                modal: document.getElementById('modal'),
+                modalMessage: document.getElementById('modal-message'),
+                modalOkBtn: document.getElementById('modal-ok-btn'),
+                modalConfirmBtn: document.getElementById('modal-confirm-btn'),
+                modalCancelBtn: document.getElementById('modal-cancel-btn'),
+
+                shareAppBtn: document.getElementById('share-app-btn'),
+                shareModal: document.getElementById('share-modal'),
+                shareModalCloseBtn: document.getElementById('share-modal-close-btn'),
+                qrcodeContainer: document.getElementById('qrcode-container'),
+                shareUrlInput: document.getElementById('share-url-input'),
+                copyUrlBtn: document.getElementById('copy-url-btn'),
+
+                loginModal: document.getElementById('login-modal'),
+                loginModalCloseBtn: document.getElementById('login-modal-close-btn'),
+                loginForm: document.getElementById('login-form'),
+                loginError: document.getElementById('login-error'),
+                userGreeting: document.getElementById('user-greeting'),
+
+                // APP STATE
+                currentView: 'class-selection',
+                currentClass: null,
+                selectedRombelTab: 'rombel-1',
+                currentDate: '',
+                data: { rombels: {}, teacherName: '', subject: '' },
+                qrcode: null,
+                loggedIn: false,
+                username: '',
+
+                init() {
+                    this.loadData();
+                    this.setupEventListeners();
+                    this.setCurrentDate();
+                    this.showLandingPage();
+                },
+
+                setCurrentDate() {
+                    const today = new Date();
+                    this.currentDate = today.toISOString().split('T')[0];
+                    this.datePicker.value = this.currentDate;
+                    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+                    this.currentDateEl.textContent = today.toLocaleDateString('id-ID', options);
+                },
+
+                setupEventListeners() {
+                    this.openLoginBtn.addEventListener('click', () => {
+                        this.loginModal.classList.remove('hidden');
+                        this.loginError.classList.add('hidden');
+                        this.loginForm.reset();
+                    });
+
+                    this.openAppBtn.addEventListener('click', () => {
+                        if (this.loggedIn) {
+                            this.showApp();
+                        } else {
+                            this.showNotification('Silakan login terlebih dahulu!');
+                        }
+                    });
+
+                    this.loginModalCloseBtn.addEventListener('click', () => {
+                        this.loginModal.classList.add('hidden');
+                    });
+
+                    this.loginForm.addEventListener('submit', (e) => {
+                        e.preventDefault();
+                        const usernameInput = document.getElementById('login-username').value.trim();
+                        const passwordInput = document.getElementById('login-password').value.trim();
+                        if(usernameInput === 'guru' && passwordInput === '1234') {
+                            this.loggedIn = true;
+                            this.username = usernameInput;
+                            localStorage.setItem('absensiLoggedIn', 'true');
+                            localStorage.setItem('absensiUsername', usernameInput);
+                            this.loginModal.classList.add('hidden');
+                            this.showNotification('Login berhasil!');
+                            setTimeout(() => {
+                                this.showApp();
+                            }, 700);
+                        } else {
+                            this.loginError.textContent = 'Username atau Password salah!';
+                            this.loginError.classList.remove('hidden');
+                        }
+                    });
+
+                    this.backButton.addEventListener('click', this.showClassSelectionView.bind(this));
+                    this.datePicker.addEventListener('change', e => { this.currentDate = e.target.value; this.render(); });
+                    this.studentListContainer.addEventListener('click', this.handleStatusClick.bind(this));
+                    this.excelFileInput.addEventListener('change', this.handleFileImport.bind(this));
+                    this.exportCsvBtn.addEventListener('click', this.exportToCsv.bind(this));
+                    this.exportPdfBtn.addEventListener('click', () => window.print());
+                    this.resetAttendanceBtn.addEventListener('click', this.resetAttendance.bind(this));
+                    this.teacherNameInput.addEventListener('input', () => this.saveTeacherInfo());
+                    this.subjectInput.addEventListener('input', () => this.saveTeacherInfo());
+
+                    this.rombelTabsContainer.addEventListener('click', e => {
+                        const tab = e.target.closest('.rombel-tab');
+                        if (tab) {
+                            this.selectedRombelTab = tab.dataset.rombelId;
+                            this.render();
+                        }
+                    });
+
+                    this.rombelManagementView.addEventListener('submit', e => {
+                        if (e.target.id === 'add-student-form') {
+                            e.preventDefault();
+                            this.addStudent(e.target.dataset.rombelId);
+                        }
+                    });
+
+                    this.rombelManagementView.addEventListener('click', e => {
+                        const openBtn = e.target.closest('.open-attendance-btn');
+                        const importBtn = e.target.closest('.import-rombel-btn');
+                        const deleteRombelBtn = e.target.closest('.delete-rombel-btn');
+                        const deleteStudentBtn = e.target.closest('.delete-student-btn');
+
+                        if (openBtn) this.handleClassSelect(openBtn.dataset.rombelId);
+                        if (importBtn) {
+                            this.excelFileInput.setAttribute('data-current-rombel-id', importBtn.dataset.rombelId);
+                            this.excelFileInput.click();
+                        }
+                        if (deleteRombelBtn) this.deleteRombel(deleteRombelBtn.dataset.rombelId);
+                        if (deleteStudentBtn) this.deleteStudent(deleteStudentBtn.dataset.rombelId, deleteStudentBtn.dataset.studentId);
+                    });
+
+                    this.rombelManagementView.addEventListener('input', e => {
+                        const nameInput = e.target.closest('.rombel-name-input');
+                        if (nameInput) {
+                            const rombelId = nameInput.dataset.rombelId;
+                            if (!this.data.rombels[rombelId]) this.data.rombels[rombelId] = { name: '', students: [], attendance: {} };
+                            this.data.rombels[rombelId].name = nameInput.value;
+                            this.saveData();
+                            this.renderRombelTabs();
+                        }
+                    });
+
+                    this.modalOkBtn.addEventListener('click', () => this.modal.classList.add('hidden'));
+                    this.modalCancelBtn.addEventListener('click', () => this.modal.classList.add('hidden'));
+
+                    this.shareAppBtn.addEventListener('click', this.showShareModal.bind(this));
+                    this.shareModalCloseBtn.addEventListener('click', () => this.shareModal.classList.add('hidden'));
+                    this.copyUrlBtn.addEventListener('click', this.copyUrlToClipboard.bind(this));
+                },
+
+                loadData() {
+                    const savedData = localStorage.getItem('absensiData');
+                    if (savedData) this.data = JSON.parse(savedData);
+                    this.teacherNameInput.value = this.data.teacherName || '';
+                    this.subjectInput.value = this.data.subject || '';
+                    this.loggedIn = localStorage.getItem('absensiLoggedIn') === 'true';
+                    this.username = localStorage.getItem('absensiUsername') || '';
+                },
+
+                saveData() {
+                    localStorage.setItem('absensiData', JSON.stringify(this.data));
+                },
+
+                saveTeacherInfo() {
+                    this.data.teacherName = this.teacherNameInput.value;
+                    this.data.subject = this.subjectInput.value;
+                    this.saveData();
+                },
+
+                showLandingPage() {
+                    this.landingPage.classList.remove('hidden');
+                    this.mainHeader.classList.add('hidden');
+                    this.classSelectionView.classList.add('hidden');
+                    this.attendanceView.classList.add('hidden');
+                },
+
+                showApp() {
+                    this.landingPage.classList.add('hidden');
+                    this.mainHeader.classList.remove('hidden');
+                    this.classSelectionView.classList.remove('hidden');
+                    this.attendanceView.classList.add('hidden');
+                    this.currentView = 'class-selection';
+                    this.render();
+                    this.setGreeting();
+                },
+
+                setGreeting() {
+                    if (this.loggedIn && this.username) {
+                        this.userGreeting.textContent = `Halo, ${this.username}`;
+                    } else {
+                        this.userGreeting.textContent = '';
+                    }
+                },
+
+                handleClassSelect(rombelId) {
+                    this.saveTeacherInfo();
+                    if (!this.loggedIn) {
+                        this.showNotification('Silakan login terlebih dahulu!');
+                        return;
+                    }
+                    const rombel = this.data.rombels[rombelId];
+                    if (!rombel || !rombel.name || !rombel.name.trim()) {
+                        this.showNotification('Harap isi nama rombel terlebih dahulu.');
+                        return;
+                    }
+                    if (!rombel.students || rombel.students.length === 0) {
+                        this.showNotification('Data siswa kosong. Silakan tambah atau impor data terlebih dahulu.');
+                        return;
+                    }
+                    this.currentClass = rombelId;
+                    this.currentView = 'attendance';
+                    this.render();
+                },
+
+                showClassSelectionView() {
+                    this.currentClass = null; this.currentView = 'class-selection'; this.render();
+                },
+
+                handleStatusClick(e) {
+                    if (!this.loggedIn) {
+                        this.showNotification('Silakan login terlebih dahulu!');
+                        return;
+                    }
+                    const button = e.target.closest('.status-btn');
+                    if (button) {
+                        const { studentId, status } = button.dataset;
+                        if (!this.data.rombels[this.currentClass].attendance[this.currentDate]) {
+                            this.data.rombels[this.currentClass].attendance[this.currentDate] = {};
+                        }
+                        this.data.rombels[this.currentClass].attendance[this.currentDate][studentId] = status;
+                        this.saveData();
+                        this.renderAttendanceSheet();
+                    }
+                },
+
+                handleFileImport(e) {
+                    if (!this.loggedIn) {
+                        this.showNotification('Silakan login terlebih dahulu!');
+                        return;
+                    }
+                    const file = e.target.files[0];
+                    const rombelId = e.target.getAttribute('data-current-rombel-id');
+                    if (!file || !rombelId) return;
+
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const fileData = new Uint8Array(event.target.result);
+                        const workbook = XLSX.read(fileData, { type: 'array' });
+                        const firstSheetName = workbook.SheetNames[0];
+                        if (!firstSheetName) { this.showNotification('File Excel tidak berisi sheet.'); return; }
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                        const students = json.slice(1).map((row, index) => ({
+                            id: `student-${Date.now()}-${index}`, nis: row[0] || '', name: row[1] || '', gender: row[2] || ''
+                        })).filter(s => s.name);
+
+                        if (students.length > 0) {
+                            const processImport = () => {
+                                if (!this.data.rombels[rombelId]) this.data.rombels[rombelId] = { name: '', students: [], attendance: {} };
+                                if (!this.data.rombels[rombelId].name) this.data.rombels[rombelId].name = firstSheetName;
+                                this.data.rombels[rombelId].students = students;
+                                this.saveData(); this.render();
+                                this.showNotification('Data siswa berhasil diimpor!');
+                            };
+
+                            if (this.data.rombels[rombelId] && this.data.rombels[rombelId].students.length > 0) {
+                                this.showConfirmation("Mengimpor akan menimpa daftar siswa saat ini. Lanjutkan?", processImport);
+                            } else {
+                                processImport();
+                            }
+                        } else {
+                            this.showNotification('Gagal mengimpor. Sheet pertama tidak berisi data siswa yang valid.');
+                        }
+                    };
+                    reader.readAsArrayBuffer(file);
+                    e.target.value = ''; e.target.removeAttribute('data-current-rombel-id');
+                },
+
+                deleteRombel(rombelId) {
+                    if (!this.loggedIn) {
+                        this.showNotification('Silakan login terlebih dahulu!');
+                        return;
+                    }
+                    const rombelName = this.data.rombels[rombelId]?.name || `Rombel ${rombelId.split('-')[1]}`;
+                     this.showConfirmation(`Yakin ingin menghapus semua data untuk ${rombelName}?`, () => {
+                        delete this.data.rombels[rombelId];
+                        this.saveData();
+                        this.render();
+                        this.showNotification(`Data untuk ${rombelName} telah dihapus.`);
+                    });
+                },
+
+                addStudent(rombelId) {
+                    if (!this.loggedIn) {
+                        this.showNotification('Silakan login terlebih dahulu!');
+                        return;
+                    }
+                    const form = this.rombelManagementView.querySelector('#add-student-form');
+                    const nis = form.querySelector('#new-student-nis').value.trim();
+                    const name = form.querySelector('#new-student-name').value.trim();
+                    const gender = form.querySelector('#new-student-gender').value;
+
+                    if (!name) {
+                        this.showNotification("Nama siswa tidak boleh kosong.");
+                        return;
+                    }
+
+                    if (!this.data.rombels[rombelId]) {
+                        this.data.rombels[rombelId] = { name: '', students: [], attendance: {} };
+                    }
+
+                    this.data.rombels[rombelId].students.push({
+                        id: `student-${Date.now()}`, nis, name, gender
+                    });
+
+                    this.saveData();
+                    this.render();
+                    form.reset();
+                },
+
+                deleteStudent(rombelId, studentId) {
+                    if (!this.loggedIn) {
+                        this.showNotification('Silakan login terlebih dahulu!');
+                        return;
+                    }
+                    const studentName = this.data.rombels[rombelId].students.find(s => s.id === studentId)?.name || 'siswa ini';
+                    this.showConfirmation(`Yakin ingin menghapus ${studentName}?`, () => {
+                        this.data.rombels[rombelId].students = this.data.rombels[rombelId].students.filter(s => s.id !== studentId);
+                        this.saveData();
+                        this.render();
+                    });
+                },
+
+                exportToCsv() {
+                    if (!this.currentClass) return;
+                    if (!this.loggedIn) {
+                        this.showNotification('Silakan login terlebih dahulu!');
+                        return;
+                    }
+                    const rombel = this.data.rombels[this.currentClass];
+                    const attendanceToday = rombel.attendance[this.currentDate] || {};
+                    let csvContent = "data:text/csv;charset=utf-8,";
+                    csvContent += `Absensi Kelas,${rombel.name}\r\n`;
+                    csvContent += `Tanggal,${this.currentDate}\r\n`;
+                    csvContent += `Guru,${this.data.teacherName}\r\n`;
+                    csvContent += `Mata Pelajaran,${this.data.subject}\r\n\r\n`;
+                    csvContent += "No,NIS/NISN,Nama Siswa,Jenis Kelamin,Status Kehadiran\r\n";
+                    rombel.students.forEach((student, index) => {
+                        const status = attendanceToday[student.id] || 'Hadir';
+                        csvContent += `${index + 1},"${student.nis}","${student.name}","${student.gender}","${status}"\r\n`;
+                    });
+                    const encodedUri = encodeURI(csvContent);
+                    const link = document.createElement("a");
+                    link.setAttribute("href", encodedUri);
+                    link.setAttribute("download", `absensi_${rombel.name}_${this.currentDate}.csv`);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                },
+
+                resetAttendance() {
+                    if (!this.loggedIn) {
+                        this.showNotification('Silakan login terlebih dahulu!');
+                        return;
+                    }
+                    const rombelName = this.data.rombels[this.currentClass]?.name;
+                     this.showConfirmation(`Yakin ingin mereset absensi kelas ${rombelName} pada tanggal ini?`, () => {
+                        if (this.data.rombels[this.currentClass].attendance[this.currentDate]) {
+                            delete this.data.rombels[this.currentClass].attendance[this.currentDate];
+                            this.saveData(); this.render();
+                            this.showNotification('Absensi hari ini berhasil direset.');
+                        }
+                    });
+                },
+
+                showNotification(message) {
+                    this.modalMessage.textContent = message;
+                    this.modalOkBtn.classList.remove('hidden');
+                    this.modalConfirmBtn.classList.add('hidden');
+                    this.modalCancelBtn.classList.add('hidden');
+                    this.modal.classList.remove('hidden');
+                },
+
+                showConfirmation(message, onConfirm) {
+                    this.modalMessage.textContent = message;
+                    this.modalOkBtn.classList.add('hidden');
+                    this.modalConfirmBtn.classList.remove('hidden');
+                    this.modalCancelBtn.classList.remove('hidden');
+                    const newConfirmBtn = this.modalConfirmBtn.cloneNode(true);
+                    this.modalConfirmBtn.parentNode.replaceChild(newConfirmBtn, this.modalConfirmBtn);
+                    this.modalConfirmBtn = newConfirmBtn;
+                    this.modalConfirmBtn.addEventListener('click', () => {
+                        this.modal.classList.add('hidden');
+                        onConfirm();
+                    }, { once: true });
+                    this.modal.classList.remove('hidden');
+                },
+
+                showShareModal() {
+                    this.shareUrlInput.value = window.location.href;
+                    this.shareModal.classList.remove('hidden');
+                    this.qrcodeContainer.innerHTML = '';
+                    this.qrcode = new QRCode(this.qrcodeContainer, {
+                        text: window.location.href,
+                        width: 160,
+                        height: 160,
+                        colorDark : "#000000",
+                        colorLight : "#ffffff",
+                        correctLevel : QRCode.CorrectLevel.H
+                    });
+                },
+
+                copyUrlToClipboard() {
+                    this.shareUrlInput.select();
+                    document.execCommand('copy');
+                    this.copyUrlBtn.textContent = 'Disalin!';
+                    setTimeout(() => {
+                        this.copyUrlBtn.textContent = 'Salin';
+                    }, 2000);
+                },
+
+                render() {
+                    if (this.currentView === 'class-selection') {
+                        this.classSelectionView.classList.remove('hidden');
+                        this.attendanceView.classList.add('hidden');
+                        this.renderRombelTabs();
+                        this.renderRombelManagement();
+                    } else {
+                        this.classSelectionView.classList.add('hidden');
+                        this.attendanceView.classList.remove('hidden');
+                        this.renderAttendanceSheet();
+                    }
+                },
+
+                renderRombelTabs() {
+                    this.rombelTabsContainer.innerHTML = '';
+                    for (let i = 1; i <= 6; i++) {
+                        const rombelId = `rombel-${i}`;
+                        const rombelData = this.data.rombels[rombelId];
+                        const tab = document.createElement('button');
+                        tab.dataset.rombelId = rombelId;
+                        tab.className = `rombel-tab px-4 py-2 rounded-md transition-colors text-sm ${this.selectedRombelTab === rombelId ? 'active' : 'bg-slate-200 hover:bg-slate-300'}`;
+                        tab.textContent = (rombelData && rombelData.name) ? rombelData.name : `Rombel ${i}`;
+                        this.rombelTabsContainer.appendChild(tab);
+                    }
+                },
+
+                renderRombelManagement() {
+                    const rombelId = this.selectedRombelTab;
+                    const rombelData = this.data.rombels[rombelId] || { name: '', students: [], attendance: {} };
+                    const hasData = rombelData.students && rombelData.students.length > 0;
+
+                    let studentListHtml = hasData
+                        ? rombelData.students.map((student, index) => `
+                            <div class="flex items-center p-2 border-b border-slate-200 text-sm">
+                                <span class="w-8 text-slate-500">${index + 1}.</span>
+                                <span class="w-1/3 text-slate-600 font-mono">${student.nis || 'N/A'}</span>
+                                <span class="flex-grow font-medium">${student.name}</span>
+                                <span class="w-24 text-slate-500">${student.gender}</span>
+                                <button data-rombel-id="${rombelId}" data-student-id="${student.id}" class="delete-student-btn text-red-500 hover:text-red-700 p-1" title="Hapus Siswa">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 pointer-events-none" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clip-rule="evenodd" /></svg>
+                                </button>
+                            </div>
+                        `).join('')
+                        : '<p class="text-center text-slate-400 mt-4">Belum ada siswa. Tambahkan secara manual atau impor dari file Excel.</p>';
+
+                    this.rombelManagementView.innerHTML = `
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700">Nama Rombel</label>
+                            <input type="text" data-rombel-id="${rombelId}" class="rombel-name-input mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm" placeholder="e.g., VII A" value="${rombelData.name || ''}">
+                        </div>
+
+                        <div class="mt-6">
+                            <h3 class="font-semibold text-slate-800 mb-2">Tambah Anggota Rombel</h3>
+                            <form id="add-student-form" data-rombel-id="${rombelId}" class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+                                <div class="md:col-span-1">
+                                    <label for="new-student-nis" class="text-xs text-slate-600">NIS/NISN</label>
+                                    <input id="new-student-nis" type="text" placeholder="NIS/NISN..." class="w-full text-sm p-2 border rounded-md">
+                                </div>
+                                <div class="md:col-span-1">
+                                    <label for="new-student-name" class="text-xs text-slate-600">Nama Siswa</label>
+                                    <input id="new-student-name" type="text" required placeholder="Nama Lengkap..." class="w-full text-sm p-2 border rounded-md">
+                                </div>
+                                <div class="md:col-span-1">
+                                    <label for="new-student-gender" class="text-xs text-slate-600">Jenis Kelamin</label>
+                                    <select id="new-student-gender" class="w-full text-sm p-2 border rounded-md bg-white">
+                                        <option>Laki-laki</option>
+                                        <option>Perempuan</option>
+                                    </select>
+                                </div>
+                                <button type="submit" class="md:col-span-1 w-full bg-sky-500 hover:bg-sky-600 text-white font-bold py-2 px-4 rounded-md text-sm">Tambah</button>
+                            </form>
+                        </div>
+
+                        <div class="mt-6">
+                             <h3 class="font-semibold text-slate-800 mb-2">Daftar Anggota (${rombelData.students.length || 0})</h3>
+                             <div class="max-h-60 overflow-y-auto bg-slate-50 rounded-md p-2">${studentListHtml}</div>
+                        </div>
+
+                        <div class="border-t mt-6 pt-4 flex flex-wrap gap-3">
+                             <button data-rombel-id="${rombelId}" class="open-attendance-btn flex-1 bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-4 rounded-lg text-sm disabled:bg-slate-400" ${!hasData ? 'disabled' : ''}>
+                                Buka Absensi
+                            </button>
+                             <button data-rombel-id="${rombelId}" class="import-rombel-btn flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
+                                Impor dari Excel
+                            </button>
+                            <button data-rombel-id="${rombelId}" class="delete-rombel-btn bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
+                                Hapus Rombel
+                            </button>
+                        </div>
+                    `;
+                },
+
+                renderAttendanceSheet() {
+                    if (!this.currentClass) return;
+                    const rombel = this.data.rombels[this.currentClass];
+                    this.classTitle.textContent = `Absensi ${rombel.name || 'Rombel'}`;
+                    const attendanceToday = rombel.attendance[this.currentDate] || {};
+                    this.attendanceInfo.innerHTML = `<p><strong>Nama Guru:</strong> ${this.data.teacherName || 'Belum diisi'}</p><p><strong>Mata Pelajaran:</strong> ${this.data.subject || 'Belum diisi'}</p>`;
+                    this.printHeader.innerHTML = `<h2 class="text-xl font-bold text-center">Laporan Absensi Murid</h2><h3 class="text-lg font-semibold text-center">${this.classTitle.textContent}</h3><p class="text-center text-sm">${this.currentDateEl.textContent}</p><div class="mt-4 text-left text-base"><p><strong>Nama Guru:</strong> ${this.data.teacherName || 'N/A'}</p><p><strong>Mata Pelajaran:</strong> ${this.data.subject || 'N/A'}</p></div>`;
+                    this.studentListContainer.innerHTML = '';
+                    rombel.students.forEach((student, index) => {
+                        const studentStatus = attendanceToday[student.id] || 'Hadir';
+                        const studentRow = `<div class="flex items-center bg-slate-50 p-3 rounded-lg shadow-sm">
+                                <div class="w-8 text-center font-bold text-slate-500 mr-2">${index + 1}</div>
+                                <div class="w-1/4 font-mono text-sm text-slate-600">${student.nis || 'N/A'}</div>
+                                <div class="flex-grow font-medium">${student.name}<span class="text-xs text-slate-500 ml-1">(${student.gender || '?'})</span></div>
+                                <div class="flex space-x-2">${this.renderStatusButtons(student.id, studentStatus)}</div>
+                                <div class="student-status-print font-bold hidden">${studentStatus}</div>
+                            </div>`;
+                        this.studentListContainer.innerHTML += studentRow;
+                    });
+                    this.renderSummary(attendanceToday, rombel.students.length);
+                },
+
+                renderStatusButtons(studentId, currentStatus) {
+                    const statuses = [{ id: 'Hadir', color: 'bg-green-500', hover: 'hover:bg-green-600', text: 'H' },{ id: 'Sakit', color: 'bg-blue-500', hover: 'hover:bg-blue-600', text: 'S' },{ id: 'Izin', color: 'bg-yellow-500', hover: 'hover:bg-yellow-600', text: 'I' },{ id: 'Alpa', color: 'bg-red-500', hover: 'hover:bg-red-600', text: 'A' }];
+                    return statuses.map(status => `<button data-student-id="${studentId}" data-status="${status.id}" class="status-btn w-9 h-9 text-white font-bold rounded-full ${status.color} ${status.hover} ${currentStatus === status.id ? 'active ring-4 ring-offset-2 ring-slate-400' : ''}" title="${status.id}">${status.text}</button>`).join('');
+                },
+
+                renderSummary(attendanceToday, totalStudents) {
+                    let hadir = 0, sakit = 0, izin = 0, alpa = 0;
+                    const presentIds = Object.keys(attendanceToday);
+                    presentIds.forEach(id => {
+                        switch(attendanceToday[id]) { case 'Hadir': hadir++; break; case 'Sakit': sakit++; break; case 'Izin': izin++; break; case 'Alpa': alpa++; break; }
+                    });
+
+                    const defaultedStudents = totalStudents - presentIds.filter(id => this.data.rombels[this.currentClass].students.some(s => s.id === id)).length;
+                    hadir += defaultedStudents;
+
+                    this.summaryContainer.innerHTML = `<div class="text-center px-3 py-2 bg-green-100 text-green-800 rounded-lg"><div class="font-bold text-2xl">${hadir}</div><div class="text-sm">Hadir</div></div><div class="text-center px-3 py-2 bg-blue-100 text-blue-800 rounded-lg"><div class="font-bold text-2xl">${sakit}</div><div class="text-sm">Sakit</div></div><div class="text-center px-3 py-2 bg-yellow-100 text-yellow-800 rounded-lg"><div class="font-bold text-2xl">${izin}</div><div class="text-sm">Izin</div></div><div class="text-center px-3 py-2 bg-red-100 text-red-800 rounded-lg"><div class="font-bold text-2xl">${alpa}</div><div class="text-sm">Alpa</div></div><div class="text-center px-3 py-2 bg-slate-100 text-slate-800 rounded-lg"><div class="font-bold text-2xl">${totalStudents}</div><div class="text-sm">Total</div></div>`;
+                }
+            };
+            app.init();
+        });
+    </script>
+</body>
+</html>
